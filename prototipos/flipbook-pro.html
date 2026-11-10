@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flipbook Pro</title>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://unpkg.com/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
+
+  <style>
+    :root {
+      --bg-color: #1a1a2e;
+      --panel-color: #16213e;
+      --accent-color: #C9A227;
+      --text-color: #F5F0E8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* --- HEADER --- */
+    header {
+      padding: 0 20px;
+      background: var(--panel-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      z-index: 50;
+      height: 60px;
+      flex-shrink: 0;
+    }
+
+    h1 { font-size: 1.2rem; display: flex; align-items: center; gap: 10px; }
+    h1 span { color: var(--accent-color); }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .file-name {
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.6);
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .upload-btn {
+      background: var(--accent-color);
+      color: #000;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      border: none;
+      transition: transform 0.1s, background 0.2s;
+    }
+    .upload-btn:hover { background: #d4af37; }
+    .upload-btn:active { transform: scale(0.95); }
+    #fileInput { display: none; }
+
+    /* --- DRAG & DROP OVERLAY --- */
+    #drop-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(26, 26, 46, 0.95);
+      z-index: 2000;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      border: 4px dashed var(--accent-color);
+    }
+    #drop-overlay.active { display: flex; }
+    #drop-overlay h2 { font-size: 2.5rem; color: var(--accent-color); margin-bottom: 10px; }
+    #drop-overlay p { font-size: 1.2rem; opacity: 0.7; }
+
+    /* --- ÁREA PRINCIPAL --- */
+    #main-area {
+      flex: 1;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+      background-image: radial-gradient(circle at center, #232d4b 0%, #1a1a2e 80%);
+      cursor: default;
+    }
+    #main-area.zoomed { cursor: grab; }
+    #main-area.zoomed:active { cursor: grabbing; }
+
+    /* Contenedor del libro */
+    #book-stage {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: transform 0.15s ease-out;
+      transform-origin: center center;
+      z-index: 10;
+    }
+
+    .stf__wrapper { margin: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+    .page { background-color: white; overflow: hidden; }
+    .page img { width: 100%; height: 100%; object-fit: fill; display: block; pointer-events: none; }
+
+    /* --- NAV ARROWS --- */
+    .nav-arrow {
+      position: absolute; 
+      top: 50%; 
+      transform: translateY(-50%);
+      background: rgba(255,255,255,0.15); 
+      border: 1px solid rgba(255,255,255,0.3);
+      color: white; 
+      width: 50px; 
+      height: 50px; 
+      border-radius: 50%;
+      display: none; 
+      align-items: center; 
+      justify-content: center;
+      cursor: pointer; 
+      font-size: 1.5rem; 
+      z-index: 100; 
+      transition: all 0.2s;
+    }
+    .nav-arrow.visible { display: flex; }
+    .nav-arrow:hover { background: var(--accent-color); color: black; transform: translateY(-50%) scale(1.1); box-shadow: 0 0 15px rgba(201, 162, 39, 0.4); }
+    .nav-arrow:disabled { opacity: 0.3; pointer-events: none; }
+    .nav-arrow.prev { left: 20px; }
+    .nav-arrow.next { right: 20px; }
+
+    /* --- BARRA INFERIOR --- */
+    .bottom-bar {
+      height: 60px; background: var(--panel-color); border-top: 1px solid rgba(255,255,255,0.1);
+      display: flex; justify-content: center; align-items: center; gap: 15px;
+      z-index: 50; padding: 0 20px; flex-shrink: 0;
+    }
+    .control-group { display: flex; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 4px; gap: 5px; }
+    .icon-btn {
+      background: transparent; border: none; color: var(--text-color);
+      padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.9rem;
+      display: flex; align-items: center; gap: 6px;
+      transition: background 0.2s;
+    }
+    .icon-btn:hover { background: rgba(255,255,255,0.1); }
+    .icon-btn.active { background: var(--accent-color); color: black; }
+    .page-info { font-variant-numeric: tabular-nums; color: rgba(255,255,255,0.6); }
+
+    /* --- ZOOM INDICATOR --- */
+    .zoom-indicator {
+      position: fixed;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.8);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      opacity: 0;
+      transition: opacity 0.3s;
+      z-index: 200;
+      pointer-events: none;
+    }
+    .zoom-indicator.visible { opacity: 1; }
+
+    /* --- MINIATURAS --- */
+    .thumbnails-drawer {
+      position: absolute; bottom: 60px; left: 0; width: 100%; height: 0;
+      background: rgba(22, 33, 62, 0.95); transition: height 0.3s ease;
+      overflow: hidden; display: flex; justify-content: center; z-index: 40;
+      backdrop-filter: blur(10px);
+    }
+    .thumbnails-drawer.open { height: 140px; border-top: 1px solid var(--accent-color); }
+    .thumbnails-scroll { display: flex; gap: 10px; padding: 20px; overflow-x: auto; max-width: 100%; }
+    .thumb {
+      height: 100px; min-width: 70px; border-radius: 4px; cursor: pointer;
+      border: 2px solid transparent; opacity: 0.6; transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    .thumb:hover { opacity: 1; transform: translateY(-5px); }
+    .thumb.active { border-color: var(--accent-color); opacity: 1; box-shadow: 0 0 10px rgba(201, 162, 39, 0.5); }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 2px; }
+
+    /* --- LOADER --- */
+    #loader {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.9); z-index: 3000; display: none;
+      flex-direction: column; justify-content: center; align-items: center;
+    }
+    .spinner {
+      width: 40px; height: 40px; border: 4px solid #fff;
+      border-top-color: var(--accent-color); border-radius: 50%;
+      animation: spin 1s linear infinite; margin-bottom: 20px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    
+    .progress-bar {
+      width: 200px;
+      height: 4px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 2px;
+      margin-top: 15px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--accent-color);
+      width: 0%;
+      transition: width 0.2s;
+    }
+
+    #initial-msg { position: absolute; text-align: center; color: rgba(255,255,255,0.3); pointer-events: none; z-index: 5; }
+    #initial-msg h2 { margin-bottom: 10px; }
+
+    /* --- FULLSCREEN --- */
+    body.is-fullscreen header { display: none; }
+    body.is-fullscreen .bottom-bar { 
+      position: fixed; bottom: 0; left: 0; width: 100%; 
+      background: rgba(22, 33, 62, 0.85); backdrop-filter: blur(5px);
+    }
+    body.is-fullscreen #main-area { height: 100vh; }
+    body.is-fullscreen .thumbnails-drawer { bottom: 60px; }
+
+    /* --- KEYBOARD HINTS --- */
+    .keyboard-hint {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.7);
+      padding: 6px 12px;
+      border-radius: 15px;
+      font-size: 0.75rem;
+      color: rgba(255,255,255,0.5);
+      z-index: 30;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .keyboard-hint.visible { opacity: 1; }
+
+    /* --- RESPONSIVE --- */
+    @media (max-width: 768px) {
+      .nav-arrow { width: 40px; height: 40px; font-size: 1.2rem; }
+      .nav-arrow.prev { left: 10px; }
+      .nav-arrow.next { right: 10px; }
+      .file-name { display: none; }
+      .control-group { gap: 2px; }
+      .icon-btn { padding: 6px 8px; font-size: 0.85rem; }
+      .icon-btn span { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="drop-overlay">
+    <h2>Suelta tu PDF aquí</h2>
+    <p>para abrirlo instantáneamente</p>
+  </div>
+
+  <div id="loader">
+    <div class="spinner"></div>
+    <div id="loader-text">Procesando...</div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+  </div>
+
+  <div class="zoom-indicator" id="zoom-indicator">100%</div>
+
+  <header>
+    <h1>📖 Flipbook<span>Pro</span></h1>
+    <div class="header-controls">
+      <span class="file-name" id="file-name"></span>
+      <button class="upload-btn" onclick="document.getElementById('fileInput').click()">📁 Subir PDF</button>
+    </div>
+    <input type="file" id="fileInput" accept="application/pdf">
+  </header>
+
+  <div id="main-area">
+    <div id="initial-msg">
+      <h2>📄 Arrastra o Sube un PDF</h2>
+      <p>Doble clic para Zoom · Rueda del ratón para acercar · Flechas ← → para navegar</p>
+    </div>
+    
+    <div id="book-stage"></div>
+
+    <button class="nav-arrow prev" id="prevBtn">❮</button>
+    <button class="nav-arrow next" id="nextBtn">❯</button>
+  </div>
+
+  <div class="thumbnails-drawer" id="thumbsDrawer">
+    <div class="thumbnails-scroll" id="thumbsContainer"></div>
+  </div>
+
+  <div class="keyboard-hint" id="keyboard-hint">← → para navegar · ESC para salir</div>
+
+  <div class="bottom-bar">
+    <div class="control-group">
+      <button class="icon-btn" id="btnThumb" title="Miniaturas">📅 <span>Miniaturas</span></button>
+    </div>
+    <span class="page-info"><span id="currPage">0</span> / <span id="totalPage">0</span></span>
+    <div class="control-group">
+      <button class="icon-btn" id="btnSingle" title="1 página">📄</button>
+      <button class="icon-btn active" id="btnDouble" title="2 páginas">📖</button>
+    </div>
+    <div class="control-group">
+      <button class="icon-btn" id="btnZoomOut" title="Alejar">➖</button>
+      <button class="icon-btn" id="btnZoomReset" title="Restablecer zoom">🔍</button>
+      <button class="icon-btn" id="btnZoomIn" title="Acercar">➕</button>
+    </div>
+    <div class="control-group">
+      <button class="icon-btn" id="btnFullscreen" title="Pantalla completa">⛶ <span>Pantalla completa</span></button>
+    </div>
+    <div class="control-group">
+      <button class="icon-btn" id="btnDownload" title="Descargar página actual">💾</button>
+    </div>
+  </div>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    const state = {
+      flipbook: null,
+      images: [],
+      currentPage: 0,
+      pdfAspectRatio: 0.77,
+      pdfPageWidth: 0,
+      pdfPageHeight: 0,
+      isSinglePage: false,
+      zoom: 1,
+      pan: { x: 0, y: 0 },
+      isDragging: false,
+      dragStart: { x: 0, y: 0 },
+      fileName: ''
+    };
+
+    const els = {
+      loader: document.getElementById('loader'),
+      loaderText: document.getElementById('loader-text'),
+      progressFill: document.getElementById('progress-fill'),
+      initialMsg: document.getElementById('initial-msg'),
+      mainArea: document.getElementById('main-area'),
+      bookStage: document.getElementById('book-stage'),
+      thumbsDrawer: document.getElementById('thumbsDrawer'),
+      thumbsContainer: document.getElementById('thumbsContainer'),
+      currPage: document.getElementById('currPage'),
+      totalPage: document.getElementById('totalPage'),
+      prevBtn: document.getElementById('prevBtn'),
+      nextBtn: document.getElementById('nextBtn'),
+      zoomIndicator: document.getElementById('zoom-indicator'),
+      fileName: document.getElementById('file-name'),
+      keyboardHint: document.getElementById('keyboard-hint')
+    };
+
+    // --- FILE INPUT ---
+    document.getElementById('fileInput').addEventListener('change', (e) => {
+      if (e.target.files[0]) processFile(e.target.files[0]);
+    });
+
+    // --- DRAG & DROP ---
+    const dropOverlay = document.getElementById('drop-overlay');
+    document.body.addEventListener('dragover', (e) => { e.preventDefault(); dropOverlay.classList.add('active'); });
+    document.body.addEventListener('dragleave', (e) => { if (e.relatedTarget === null) dropOverlay.classList.remove('active'); });
+    document.body.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropOverlay.classList.remove('active');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type === 'application/pdf') processFile(file);
+    });
+
+    // --- BOTTOM BAR CONTROLS ---
+    document.getElementById('btnThumb').addEventListener('click', () => {
+      els.thumbsDrawer.classList.toggle('open');
+    });
+    document.getElementById('btnSingle').addEventListener('click', () => setViewMode(true));
+    document.getElementById('btnDouble').addEventListener('click', () => setViewMode(false));
+    document.getElementById('btnFullscreen').addEventListener('click', toggleFullscreen);
+    document.getElementById('btnZoomIn').addEventListener('click', () => setZoom(state.zoom + 0.5));
+    document.getElementById('btnZoomOut').addEventListener('click', () => setZoom(state.zoom - 0.5));
+    document.getElementById('btnZoomReset').addEventListener('click', resetZoom);
+    document.getElementById('btnDownload').addEventListener('click', downloadCurrentPage);
+
+    // --- NAV ARROWS ---
+    els.prevBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (state.flipbook) {
+        try {
+          state.flipbook.flipPrev('top');
+        } catch(err) {
+          // Fallback: ir a página anterior manualmente
+          const newPage = Math.max(0, state.currentPage - 1);
+          state.flipbook.flip(newPage);
+        }
+      }
+    });
+    
+    els.nextBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (state.flipbook) {
+        try {
+          state.flipbook.flipNext('top');
+        } catch(err) {
+          // Fallback: ir a página siguiente manualmente
+          const newPage = Math.min(state.images.length - 1, state.currentPage + 1);
+          state.flipbook.flip(newPage);
+        }
+      }
+    });
+
+    // --- KEYBOARD ---
+    document.addEventListener('keydown', (e) => {
+      // Mostrar hint la primera vez
+      if (!window.hintShown) {
+        window.hintShown = true;
+        els.keyboardHint.classList.add('visible');
+        setTimeout(() => els.keyboardHint.classList.remove('visible'), 2000);
+      }
+      
+      // Solo procesar si hay flipbook cargado
+      if (!state.flipbook) return;
+      
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        try {
+          state.flipbook.flipPrev('top');
+        } catch(err) {
+          const newPage = Math.max(0, state.currentPage - 1);
+          state.flipbook.flip(newPage);
+        }
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        try {
+          state.flipbook.flipNext('top');
+        } catch(err) {
+          const newPage = Math.min(state.images.length - 1, state.currentPage + 1);
+          state.flipbook.flip(newPage);
+        }
+      }
+      if (e.key === 'Escape') {
+        if (document.fullscreenElement) document.exitFullscreen();
+        resetZoom();
+      }
+      if (e.key === '+' || e.key === '=') setZoom(state.zoom + 0.25);
+      if (e.key === '-') setZoom(state.zoom - 0.25);
+      if (e.key === '0') resetZoom();
+    });
+
+    // --- RESIZE ---
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        if (state.images.length > 0) initFlipbook();
+      }, 200);
+    });
+
+    // --- ZOOM & PAN ---
+    els.mainArea.addEventListener('dblclick', (e) => {
+      if (state.zoom === 1) {
+        // Zoom hacia donde hizo doble clic
+        const rect = els.mainArea.getBoundingClientRect();
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        const clickX = e.clientX - rect.left;
+        const clickY = e.clientY - rect.top;
+        
+        // Calcular offset para centrar en el punto de clic
+        state.pan.x = (centerX - clickX) / 2.5;
+        state.pan.y = (centerY - clickY) / 2.5;
+        
+        setZoom(2.5);
+      } else {
+        resetZoom();
+      }
+    });
+
+    els.mainArea.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.2 : 0.2;
+      setZoom(state.zoom + delta);
+    }, { passive: false });
+
+    els.mainArea.addEventListener('mousedown', startDrag);
+    window.addEventListener('mousemove', doDrag);
+    window.addEventListener('mouseup', endDrag);
+
+    // Touch support for drag
+    els.mainArea.addEventListener('touchstart', (e) => {
+      if (state.zoom <= 1 || e.touches.length !== 1) return;
+      state.isDragging = true;
+      state.dragStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }, { passive: false });
+
+    window.addEventListener('touchmove', (e) => {
+      if (!state.isDragging || e.touches.length !== 1) return;
+      e.preventDefault();
+      const dx = (e.touches[0].clientX - state.dragStart.x) / state.zoom;
+      const dy = (e.touches[0].clientY - state.dragStart.y) / state.zoom;
+      state.pan.x += dx;
+      state.pan.y += dy;
+      state.dragStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      updateTransform();
+    }, { passive: false });
+
+    window.addEventListener('touchend', endDrag);
+
+    // --- PDF PROCESSING ---
+    async function processFile(file) {
+      els.loader.style.display = 'flex';
+      els.initialMsg.style.display = 'none';
+      els.progressFill.style.width = '0%';
+      state.fileName = file.name;
+      els.fileName.textContent = file.name;
+      
+      try {
+        const buffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument(buffer).promise;
+        
+        const firstPage = await pdf.getPage(1);
+        const viewport = firstPage.getViewport({ scale: 1 });
+        state.pdfPageWidth = viewport.width;
+        state.pdfPageHeight = viewport.height;
+        state.pdfAspectRatio = viewport.width / viewport.height;
+
+        state.images = [];
+        state.currentPage = 0;
+        els.thumbsContainer.innerHTML = '';
+        
+        for (let i = 1; i <= pdf.numPages; i++) {
+          els.loaderText.textContent = `Página ${i} de ${pdf.numPages}...`;
+          els.progressFill.style.width = `${(i / pdf.numPages) * 100}%`;
+          
+          const page = await pdf.getPage(i);
+          const v = page.getViewport({ scale: 2 });
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          canvas.width = v.width;
+          canvas.height = v.height;
+          await page.render({ canvasContext: ctx, viewport: v }).promise;
+          const imgUrl = canvas.toDataURL('image/jpeg', 0.85);
+          state.images.push(imgUrl);
+
+          const thumb = document.createElement('div');
+          thumb.className = 'thumb';
+          thumb.innerHTML = `<img src="${imgUrl}" alt="Página ${i}">`;
+          thumb.onclick = () => state.flipbook && state.flipbook.flip(i - 1);
+          els.thumbsContainer.appendChild(thumb);
+        }
+
+        els.totalPage.textContent = state.images.length;
+        els.prevBtn.classList.add('visible');
+        els.nextBtn.classList.add('visible');
+        
+        initFlipbook();
+
+      } catch (err) {
+        console.error(err);
+        alert('Error: No se pudo abrir el PDF. Asegúrate de que el archivo no está dañado o protegido.');
+      } finally {
+        els.loader.style.display = 'none';
+      }
+    }
+
+    function initFlipbook() {
+      const savedPage = state.currentPage;
+      
+      if (state.flipbook) {
+        state.flipbook.destroy();
+        state.flipbook = null;
+      }
+      els.bookStage.innerHTML = '';
+      resetZoom();
+
+      const bookElem = document.createElement('div');
+      els.bookStage.appendChild(bookElem);
+
+      state.images.forEach((src, index) => {
+        const d = document.createElement('div');
+        d.className = 'page';
+        d.innerHTML = `<img src="${src}" draggable="false" alt="Página ${index + 1}">`;
+        bookElem.appendChild(d);
+      });
+
+      const availW = els.mainArea.clientWidth - 40;
+      const availH = els.mainArea.clientHeight - 40;
+
+      const isMobile = window.innerWidth < 768;
+      const actualSingleMode = isMobile ? true : state.isSinglePage;
+      
+      document.getElementById('btnSingle').classList.toggle('active', actualSingleMode);
+      document.getElementById('btnDouble').classList.toggle('active', !actualSingleMode);
+
+      const bookAspectRatio = actualSingleMode ? state.pdfAspectRatio : (state.pdfAspectRatio * 2);
+
+      let targetWidth, targetHeight;
+      if (availW / availH > bookAspectRatio) {
+        targetHeight = availH;
+        targetWidth = targetHeight * bookAspectRatio;
+      } else {
+        targetWidth = availW;
+        targetHeight = targetWidth / bookAspectRatio;
+      }
+
+      state.flipbook = new St.PageFlip(bookElem, {
+        width: targetWidth / (actualSingleMode ? 1 : 2),
+        height: targetHeight,
+        size: 'fixed',
+        minWidth: 100,
+        maxWidth: 5000,
+        minHeight: 100,
+        maxHeight: 5000,
+        showCover: !actualSingleMode, // Solo mostrar portada en modo doble
+        usePortrait: actualSingleMode,
+        maxShadowOpacity: 0.5,
+        mobileScrollSupport: false,
+        disableFlipByClick: true,
+        flippingTime: 600,
+        swipeDistance: 30
+      });
+
+      state.flipbook.loadFromHTML(document.querySelectorAll('.page'));
+      
+      // Esperar a que el flipbook esté listo
+      setTimeout(() => {
+        // Restaurar página
+        if (savedPage > 0 && savedPage < state.images.length) {
+          try { state.flipbook.flip(savedPage); } catch(e) {}
+        }
+        
+        // Actualizar UI
+        els.currPage.textContent = state.flipbook.getCurrentPageIndex() + 1;
+        updateNavButtons();
+        updateThumbs();
+      }, 100);
+
+      state.flipbook.on('flip', (e) => {
+        state.currentPage = e.data;
+        els.currPage.textContent = e.data + 1;
+        updateNavButtons();
+        updateThumbs();
+      });
+    }
+
+    function setViewMode(single) {
+      if (state.isSinglePage !== single) {
+        state.isSinglePage = single;
+        if (state.images.length > 0) initFlipbook();
+      }
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.body.requestFullscreen().catch(console.error);
+        document.body.classList.add('is-fullscreen');
+      } else {
+        document.exitFullscreen();
+        document.body.classList.remove('is-fullscreen');
+      }
+    }
+
+    document.addEventListener('fullscreenchange', () => {
+      if (!document.fullscreenElement) {
+        document.body.classList.remove('is-fullscreen');
+      }
+      // Reinicializar al cambiar fullscreen para ajustar tamaño
+      if (state.images.length > 0) {
+        setTimeout(initFlipbook, 100);
+      }
+    });
+
+    function updateNavButtons() {
+      els.prevBtn.disabled = state.currentPage === 0;
+      els.nextBtn.disabled = state.currentPage >= state.images.length - 1;
+    }
+
+    function updateThumbs() {
+      document.querySelectorAll('.thumb').forEach((t, i) => {
+        t.classList.toggle('active', i === state.currentPage);
+        if (i === state.currentPage) {
+          t.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+      });
+    }
+
+    function setZoom(val) {
+      state.zoom = Math.min(Math.max(1, val), 5);
+      if (state.zoom === 1) {
+        state.pan = { x: 0, y: 0 };
+      }
+      updateTransform();
+      showZoomIndicator();
+    }
+
+    function resetZoom() {
+      state.zoom = 1;
+      state.pan = { x: 0, y: 0 };
+      updateTransform();
+      showZoomIndicator();
+    }
+    
+    function updateTransform() {
+      els.bookStage.style.transform = `scale(${state.zoom}) translate(${state.pan.x}px, ${state.pan.y}px)`;
+      els.mainArea.classList.toggle('zoomed', state.zoom > 1);
+    }
+
+    function showZoomIndicator() {
+      els.zoomIndicator.textContent = `${Math.round(state.zoom * 100)}%`;
+      els.zoomIndicator.classList.add('visible');
+      clearTimeout(window.zoomTimeout);
+      window.zoomTimeout = setTimeout(() => {
+        els.zoomIndicator.classList.remove('visible');
+      }, 1500);
+    }
+
+    function startDrag(e) {
+      if (state.zoom <= 1) return;
+      state.isDragging = true;
+      state.dragStart = { x: e.clientX, y: e.clientY };
+    }
+
+    function doDrag(e) {
+      if (!state.isDragging) return;
+      e.preventDefault();
+      const dx = (e.clientX - state.dragStart.x) / state.zoom;
+      const dy = (e.clientY - state.dragStart.y) / state.zoom;
+      state.pan.x += dx;
+      state.pan.y += dy;
+      state.dragStart = { x: e.clientX, y: e.clientY };
+      updateTransform();
+    }
+
+    function endDrag() {
+      state.isDragging = false;
+    }
+
+    function downloadCurrentPage() {
+      if (state.images.length === 0) return;
+      const link = document.createElement('a');
+      link.download = `${state.fileName.replace('.pdf', '')}_pagina_${state.currentPage + 1}.jpg`;
+      link.href = state.images[state.currentPage];
+      link.click();
+    }
+  </script>
+</body>
+</html>

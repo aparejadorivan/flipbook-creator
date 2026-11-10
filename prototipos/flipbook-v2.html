@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flipbook Creator</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://unpkg.com/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      min-height: 100vh;
+      color: #F5F0E8;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+    }
+    
+    h1 span { color: #C9A227; }
+    
+    .subtitle {
+      color: rgba(245, 240, 232, 0.7);
+    }
+    
+    /* Upload Zone */
+    .upload-zone {
+      border: 2px dashed rgba(201, 162, 39, 0.4);
+      border-radius: 16px;
+      padding: 60px 40px;
+      text-align: center;
+      background: rgba(255, 255, 255, 0.03);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: #C9A227;
+      background: rgba(201, 162, 39, 0.08);
+    }
+    
+    .upload-icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 20px;
+      background: linear-gradient(135deg, rgba(201, 162, 39, 0.2), rgba(114, 47, 55, 0.2));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+    }
+    
+    .upload-zone h2 {
+      font-size: 1.5rem;
+      margin-bottom: 10px;
+    }
+    
+    .upload-zone p {
+      color: rgba(245, 240, 232, 0.6);
+    }
+    
+    #fileInput { display: none; }
+    
+    /* Progress */
+    .progress-container {
+      max-width: 400px;
+      margin: 20px auto;
+      display: none;
+    }
+    
+    .progress-bar {
+      height: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #C9A227, #d4af37);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+    
+    .progress-text {
+      text-align: center;
+      margin-top: 10px;
+      color: #C9A227;
+    }
+    
+    /* Flipbook Viewer */
+    .viewer {
+      display: none;
+    }
+    
+    .viewer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    
+    .file-info h2 {
+      font-size: 1.3rem;
+    }
+    
+    .file-info p {
+      color: rgba(245, 240, 232, 0.6);
+      font-size: 0.9rem;
+    }
+    
+    .btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: all 0.3s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: #F5F0E8;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: #C9A227;
+      color: #C9A227;
+    }
+    
+    /* Book Container */
+    .book-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      margin: 30px 0;
+    }
+    
+    .nav-btn {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #F5F0E8;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 1.5rem;
+    }
+    
+    .nav-btn:hover:not(:disabled) {
+      background: #C9A227;
+      color: #1A1A1A;
+    }
+    
+    .nav-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    
+    #flipbook {
+      box-shadow: 0 25px 80px -20px rgba(0, 0, 0, 0.6);
+    }
+    
+    .page {
+      background: white;
+    }
+    
+    .page img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    
+    /* Controls */
+    .controls {
+      text-align: center;
+      margin-top: 20px;
+    }
+    
+    .page-indicator {
+      font-size: 1.1rem;
+      margin-bottom: 15px;
+    }
+    
+    .page-indicator span {
+      color: #C9A227;
+      font-weight: bold;
+    }
+    
+    .controls-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    
+    /* Thumbnails */
+    .thumbnails {
+      display: flex;
+      gap: 8px;
+      padding: 15px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 12px;
+      overflow-x: auto;
+      margin-top: 20px;
+      max-width: 100%;
+    }
+    
+    .thumbnail {
+      width: 60px;
+      height: 80px;
+      border-radius: 4px;
+      overflow: hidden;
+      cursor: pointer;
+      border: 2px solid transparent;
+      flex-shrink: 0;
+      transition: all 0.3s ease;
+    }
+    
+    .thumbnail:hover {
+      transform: scale(1.1);
+    }
+    
+    .thumbnail.active {
+      border-color: #C9A227;
+      box-shadow: 0 0 15px rgba(201, 162, 39, 0.5);
+    }
+    
+    .thumbnail img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    
+    .hint {
+      color: rgba(245, 240, 232, 0.4);
+      font-size: 0.85rem;
+      margin-top: 15px;
+    }
+    
+    /* Fullscreen - MUCHO MÁS GRANDE */
+    .fullscreen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: linear-gradient(135deg, #0a0a15 0%, #1a1a2e 100%);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 10px;
+      overflow: hidden;
+    }
+    
+    .fullscreen .viewer-header {
+      display: none;
+    }
+    
+    .fullscreen .book-container {
+      margin: 10px 0;
+    }
+    
+    .fullscreen .thumbnails {
+      position: fixed;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 90vw;
+      margin: 0;
+      background: rgba(0, 0, 0, 0.7);
+    }
+    
+    .fullscreen .controls {
+      margin-top: 10px;
+    }
+    
+    .fullscreen .hint {
+      display: none;
+    }
+    
+    .close-fullscreen-btn {
+      position: fixed;
+      top: 15px;
+      right: 15px;
+      z-index: 10001;
+      width: 45px;
+      height: 45px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: #F5F0E8;
+      cursor: pointer;
+      font-size: 1.3rem;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+    }
+    
+    .close-fullscreen-btn:hover {
+      background: #C9A227;
+      color: #1A1A1A;
+    }
+    
+    .fullscreen .close-fullscreen-btn {
+      display: flex;
+    }
+    
+    /* ZOOM MODAL */
+    .zoom-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.95);
+      z-index: 10000;
+      display: none;
+      cursor: grab;
+      overflow: hidden;
+    }
+    
+    .zoom-overlay.active {
+      display: block;
+    }
+    
+    .zoom-overlay.dragging {
+      cursor: grabbing;
+    }
+    
+    .zoom-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .zoom-image {
+      max-width: none;
+      max-height: none;
+      transform-origin: center center;
+      transition: transform 0.1s ease-out;
+    }
+    
+    .zoom-close {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      color: white;
+      font-size: 1.5rem;
+      cursor: pointer;
+      z-index: 10001;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+    }
+    
+    .zoom-close:hover {
+      background: #C9A227;
+      color: #1A1A1A;
+    }
+    
+    .zoom-hint {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px 20px;
+      border-radius: 20px;
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 0.85rem;
+      z-index: 10001;
+    }
+    
+    .zoom-controls {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      z-index: 10001;
+    }
+    
+    .zoom-btn {
+      width: 45px;
+      height: 45px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      color: white;
+      font-size: 1.3rem;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .zoom-btn:hover {
+      background: #C9A227;
+      color: #1A1A1A;
+    }
+    
+    /* Error */
+    .error {
+      background: rgba(220, 53, 69, 0.1);
+      border: 1px solid rgba(220, 53, 69, 0.3);
+      color: #ff6b6b;
+      padding: 15px 20px;
+      border-radius: 12px;
+      text-align: center;
+      margin: 20px auto;
+      max-width: 600px;
+      display: none;
+    }
+    
+    /* Mobile */
+    @media (max-width: 768px) {
+      h1 { font-size: 1.8rem; }
+      .nav-btn { display: none; }
+      .mobile-nav {
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        margin-top: 15px;
+      }
+      .mobile-nav .nav-btn { display: flex; align-items: center; justify-content: center; }
+    }
+    
+    @media (min-width: 769px) {
+      .mobile-nav { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📖 Flipbook <span>Creator</span></h1>
+      <p class="subtitle">Convierte PDFs en libros interactivos. Todo en tu navegador, 100% privado.</p>
+    </header>
+
+    <!-- Upload Section -->
+    <div id="uploadSection">
+      <div class="upload-zone" id="uploadZone">
+        <div class="upload-icon">📄</div>
+        <h2>Arrastra tu PDF aquí</h2>
+        <p>o haz clic para seleccionar</p>
+        <input type="file" id="fileInput" accept="application/pdf">
+      </div>
+      
+      <div class="progress-container" id="progressContainer">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <p class="progress-text" id="progressText">Procesando...</p>
+      </div>
+      
+      <div class="error" id="errorMsg"></div>
+    </div>
+
+    <!-- Viewer Section -->
+    <div class="viewer" id="viewer">
+      <button class="close-fullscreen-btn" id="closeFullscreenBtn">✕</button>
+      
+      <div class="viewer-header">
+        <div class="file-info">
+          <h2 id="fileName">documento.pdf</h2>
+          <p id="pageCount">0 páginas</p>
+        </div>
+        <button class="btn btn-secondary" id="newFileBtn">📁 Cargar otro PDF</button>
+      </div>
+
+      <div class="book-container">
+        <button class="nav-btn" id="prevBtn">◀</button>
+        <div id="flipbook"></div>
+        <button class="nav-btn" id="nextBtn">▶</button>
+      </div>
+
+      <div class="mobile-nav">
+        <button class="nav-btn" id="prevBtnMobile">◀</button>
+        <button class="nav-btn" id="nextBtnMobile">▶</button>
+      </div>
+
+      <div class="controls">
+        <p class="page-indicator">Página <span id="currentPage">1</span> de <span id="totalPages">1</span></p>
+        <div class="controls-buttons">
+          <button class="btn btn-secondary" id="fullscreenBtn">🔳 Pantalla completa</button>
+          <button class="btn btn-secondary" id="downloadBtn">💾 Descargar página</button>
+        </div>
+      </div>
+
+      <div class="thumbnails" id="thumbnails"></div>
+      
+      <p class="hint">Usa las teclas ← → para navegar · Doble clic para hacer zoom</p>
+    </div>
+  </div>
+
+  <!-- Zoom Overlay -->
+  <div class="zoom-overlay" id="zoomOverlay">
+    <button class="zoom-close" id="zoomClose">✕</button>
+    <div class="zoom-container" id="zoomContainer">
+      <img class="zoom-image" id="zoomImage" src="" alt="Zoom">
+    </div>
+    <div class="zoom-controls">
+      <button class="zoom-btn" id="zoomOut">−</button>
+      <button class="zoom-btn" id="zoomReset">⟲</button>
+      <button class="zoom-btn" id="zoomIn">+</button>
+    </div>
+    <div class="zoom-hint">Arrastra para mover · Scroll o botones para zoom · Clic o ESC para cerrar</div>
+  </div>
+
+  <script>
+    // Initialize PDF.js
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    // State
+    let pageFlip = null;
+    let pages = [];
+    let currentPage = 0;
+    let isFullscreen = false;
+
+    // Zoom state
+    let zoomLevel = 1;
+    let zoomX = 0;
+    let zoomY = 0;
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+
+    // DOM Elements
+    const uploadSection = document.getElementById('uploadSection');
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    const errorMsg = document.getElementById('errorMsg');
+    const viewer = document.getElementById('viewer');
+    const flipbookEl = document.getElementById('flipbook');
+    const thumbnails = document.getElementById('thumbnails');
+    const fileNameEl = document.getElementById('fileName');
+    const pageCountEl = document.getElementById('pageCount');
+    const currentPageEl = document.getElementById('currentPage');
+    const totalPagesEl = document.getElementById('totalPages');
+    
+    // Zoom elements
+    const zoomOverlay = document.getElementById('zoomOverlay');
+    const zoomImage = document.getElementById('zoomImage');
+    const zoomContainer = document.getElementById('zoomContainer');
+
+    // Event Listeners
+    uploadZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadZone.classList.add('dragover');
+    });
+
+    uploadZone.addEventListener('dragleave', () => {
+      uploadZone.classList.remove('dragover');
+    });
+
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type === 'application/pdf') {
+        handleFile(file);
+      } else {
+        showError('Por favor, selecciona un archivo PDF válido.');
+      }
+    });
+
+    document.getElementById('newFileBtn').addEventListener('click', resetApp);
+    document.getElementById('prevBtn').addEventListener('click', goToPrev);
+    document.getElementById('nextBtn').addEventListener('click', goToNext);
+    document.getElementById('prevBtnMobile').addEventListener('click', goToPrev);
+    document.getElementById('nextBtnMobile').addEventListener('click', goToNext);
+    document.getElementById('fullscreenBtn').addEventListener('click', toggleFullscreen);
+    document.getElementById('closeFullscreenBtn').addEventListener('click', toggleFullscreen);
+    document.getElementById('downloadBtn').addEventListener('click', downloadCurrentPage);
+
+    // Zoom controls
+    document.getElementById('zoomClose').addEventListener('click', closeZoom);
+    document.getElementById('zoomIn').addEventListener('click', () => adjustZoom(0.5));
+    document.getElementById('zoomOut').addEventListener('click', () => adjustZoom(-0.5));
+    document.getElementById('zoomReset').addEventListener('click', resetZoom);
+
+    zoomOverlay.addEventListener('click', (e) => {
+      if (e.target === zoomOverlay || e.target === zoomContainer) {
+        closeZoom();
+      }
+    });
+
+    zoomOverlay.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      adjustZoom(e.deltaY > 0 ? -0.2 : 0.2);
+    });
+
+    // Drag to pan
+    zoomContainer.addEventListener('mousedown', (e) => {
+      if (zoomLevel > 1) {
+        isDragging = true;
+        dragStartX = e.clientX - zoomX;
+        dragStartY = e.clientY - zoomY;
+        zoomOverlay.classList.add('dragging');
+      }
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        zoomX = e.clientX - dragStartX;
+        zoomY = e.clientY - dragStartY;
+        updateZoomTransform();
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      isDragging = false;
+      zoomOverlay.classList.remove('dragging');
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (zoomOverlay.classList.contains('active')) {
+        if (e.key === 'Escape') closeZoom();
+        if (e.key === '+' || e.key === '=') adjustZoom(0.5);
+        if (e.key === '-') adjustZoom(-0.5);
+        return;
+      }
+      
+      if (e.key === 'ArrowLeft') goToPrev();
+      if (e.key === 'ArrowRight') goToNext();
+      if (e.key === 'Escape' && isFullscreen) toggleFullscreen();
+    });
+
+    // Functions
+    async function handleFile(file) {
+      if (!file) return;
+      
+      errorMsg.style.display = 'none';
+      progressContainer.style.display = 'block';
+      uploadZone.style.display = 'none';
+      
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const totalPages = pdf.numPages;
+        
+        pages = [];
+        
+        for (let i = 1; i <= totalPages; i++) {
+          const page = await pdf.getPage(i);
+          const scale = 2;
+          const viewport = page.getViewport({ scale });
+          
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+          
+          await page.render({
+            canvasContext: context,
+            viewport: viewport,
+          }).promise;
+          
+          pages.push(canvas.toDataURL('image/jpeg', 0.92));
+          
+          const progress = Math.round((i / totalPages) * 100);
+          progressFill.style.width = progress + '%';
+          progressText.textContent = `Procesando página ${i} de ${totalPages}...`;
+        }
+        
+        fileNameEl.textContent = file.name;
+        pageCountEl.textContent = `${pages.length} páginas`;
+        totalPagesEl.textContent = pages.length;
+        
+        showViewer();
+        
+      } catch (err) {
+        console.error(err);
+        showError('Error al procesar el PDF. Asegúrate de que no está dañado o protegido.');
+        resetUpload();
+      }
+    }
+
+    function showViewer() {
+      uploadSection.style.display = 'none';
+      viewer.style.display = 'block';
+      
+      createThumbnails();
+      initFlipbook();
+    }
+
+    function createThumbnails() {
+      thumbnails.innerHTML = '';
+      pages.forEach((page, index) => {
+        const thumb = document.createElement('div');
+        thumb.className = 'thumbnail' + (index === 0 ? ' active' : '');
+        thumb.innerHTML = `<img src="${page}" alt="Página ${index + 1}">`;
+        thumb.addEventListener('click', () => goToPage(index));
+        thumbnails.appendChild(thumb);
+      });
+    }
+
+    function initFlipbook() {
+      // Clear previous
+      flipbookEl.innerHTML = '';
+      
+      // Calculate size - MUCHO MÁS GRANDE en fullscreen
+      let maxWidth, maxHeight;
+      
+      if (isFullscreen) {
+        maxWidth = window.innerWidth * 0.9;
+        maxHeight = window.innerHeight * 0.75;
+      } else {
+        maxWidth = Math.min(window.innerWidth * 0.8, 800);
+        maxHeight = Math.min(window.innerHeight * 0.5, 500);
+      }
+      
+      const aspectRatio = 0.77;
+      
+      let width = maxWidth / 2;
+      let height = width / aspectRatio;
+      
+      if (height > maxHeight) {
+        height = maxHeight;
+        width = height * aspectRatio;
+      }
+      
+      // Create page elements
+      pages.forEach((page, index) => {
+        const pageEl = document.createElement('div');
+        pageEl.className = 'page';
+        pageEl.innerHTML = `<img src="${page}" alt="Página ${index + 1}">`;
+        flipbookEl.appendChild(pageEl);
+      });
+      
+      // Initialize PageFlip
+      pageFlip = new St.PageFlip(flipbookEl, {
+        width: Math.round(width),
+        height: Math.round(height),
+        size: 'stretch',
+        minWidth: 300,
+        maxWidth: isFullscreen ? 1200 : 600,
+        minHeight: 400,
+        maxHeight: isFullscreen ? 1000 : 700,
+        maxShadowOpacity: 0.5,
+        showCover: true,
+        mobileScrollSupport: true,
+        useMouseEvents: true,
+        flippingTime: 800,
+        usePortrait: true,
+        autoSize: true,
+        drawShadow: true,
+      });
+      
+      pageFlip.loadFromHTML(document.querySelectorAll('.page'));
+      
+      pageFlip.on('flip', (e) => {
+        currentPage = e.data;
+        updatePageIndicator();
+        updateThumbnails();
+      });
+      
+      // Add double-click for zoom
+      flipbookEl.addEventListener('dblclick', handleDoubleClick);
+      
+      updatePageIndicator();
+    }
+
+    function handleDoubleClick(e) {
+      e.preventDefault();
+      
+      // Get click position relative to the flipbook
+      const rect = flipbookEl.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const bookWidth = rect.width;
+      
+      // Determine which page was clicked (left or right)
+      let pageIndex;
+      if (clickX < bookWidth / 2) {
+        // Left page
+        pageIndex = currentPage > 0 ? currentPage - 1 : currentPage;
+      } else {
+        // Right page
+        pageIndex = currentPage;
+      }
+      
+      // Open zoom with that page
+      openZoom(pageIndex, e.clientX, e.clientY);
+    }
+
+    function openZoom(pageIndex, clickX, clickY) {
+      if (!pages[pageIndex]) return;
+      
+      zoomImage.src = pages[pageIndex];
+      zoomLevel = 2; // Start zoomed in
+      
+      // Calculate initial position to center on click point
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      
+      // Offset to make the clicked area visible
+      zoomX = (windowWidth / 2 - clickX) * (zoomLevel - 1);
+      zoomY = (windowHeight / 2 - clickY) * (zoomLevel - 1);
+      
+      updateZoomTransform();
+      zoomOverlay.classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeZoom() {
+      zoomOverlay.classList.remove('active');
+      document.body.style.overflow = '';
+      resetZoom();
+    }
+
+    function adjustZoom(delta) {
+      zoomLevel = Math.max(0.5, Math.min(5, zoomLevel + delta));
+      if (zoomLevel <= 1) {
+        zoomX = 0;
+        zoomY = 0;
+      }
+      updateZoomTransform();
+    }
+
+    function resetZoom() {
+      zoomLevel = 1;
+      zoomX = 0;
+      zoomY = 0;
+      updateZoomTransform();
+    }
+
+    function updateZoomTransform() {
+      zoomImage.style.transform = `translate(${zoomX}px, ${zoomY}px) scale(${zoomLevel})`;
+    }
+
+    function updatePageIndicator() {
+      currentPageEl.textContent = currentPage + 1;
+      document.getElementById('prevBtn').disabled = currentPage === 0;
+      document.getElementById('nextBtn').disabled = currentPage >= pages.length - 1;
+      document.getElementById('prevBtnMobile').disabled = currentPage === 0;
+      document.getElementById('nextBtnMobile').disabled = currentPage >= pages.length - 1;
+    }
+
+    function updateThumbnails() {
+      document.querySelectorAll('.thumbnail').forEach((thumb, index) => {
+        thumb.classList.toggle('active', index === currentPage);
+      });
+    }
+
+    function goToPrev() {
+      if (pageFlip && currentPage > 0) {
+        pageFlip.flipPrev();
+      }
+    }
+
+    function goToNext() {
+      if (pageFlip && currentPage < pages.length - 1) {
+        pageFlip.flipNext();
+      }
+    }
+
+    function goToPage(pageNum) {
+      if (pageFlip) {
+        pageFlip.flip(pageNum);
+      }
+    }
+
+    function toggleFullscreen() {
+      isFullscreen = !isFullscreen;
+      if (isFullscreen) {
+        viewer.classList.add('fullscreen');
+        document.getElementById('fullscreenBtn').textContent = '✕ Salir';
+      } else {
+        viewer.classList.remove('fullscreen');
+        document.getElementById('fullscreenBtn').textContent = '🔳 Pantalla completa';
+      }
+      // Reinitialize with new size
+      setTimeout(initFlipbook, 100);
+    }
+
+    function downloadCurrentPage() {
+      const link = document.createElement('a');
+      link.download = `pagina-${currentPage + 1}.jpg`;
+      link.href = pages[currentPage];
+      link.click();
+    }
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.style.display = 'block';
+    }
+
+    function resetUpload() {
+      progressContainer.style.display = 'none';
+      uploadZone.style.display = 'block';
+      progressFill.style.width = '0%';
+    }
+
+    function resetApp() {
+      if (pageFlip) {
+        pageFlip.destroy();
+        pageFlip = null;
+      }
+      pages = [];
+      currentPage = 0;
+      viewer.style.display = 'none';
+      viewer.classList.remove('fullscreen');
+      uploadSection.style.display = 'block';
+      resetUpload();
+      fileInput.value = '';
+    }
+  </script>
+</body>
+</html>

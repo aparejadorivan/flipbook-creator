@@ -1,126 +1,49 @@
-# 📖 Flipbook Creator
+# Folio — Flipbook Studio
 
-Convierte tus documentos PDF en elegantes flipbooks interactivos. Todo el procesamiento se realiza en el navegador del usuario, sin enviar datos a ningún servidor.
+Estudio local para presentar PDFs con paso de página, perspectiva y encuadres para vídeo.
 
-![Flipbook Creator](https://img.shields.io/badge/Next.js-14-black?style=flat-square&logo=next.js)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=flat-square&logo=typescript)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind-3-38B2AC?style=flat-square&logo=tailwind-css)
+## Uso
 
-## ✨ Características
+- Doble clic en `Abrir flipbook.bat` (instala y compila la primera vez) y abrir http://localhost:3100
+- Para desarrollo: `npm install` y `npm run dev` en http://localhost:3000
+- Importar un PDF o explorar el documento de muestra.
+- Ajustar perspectiva, acercamiento, fondo y sombra.
+- Elegir 16:9, 9:16, 1:1 o 4:5; activar guías si hacen falta.
+- Entrar en modo limpio con H y capturar la escena con el grabador de pantalla. Esc vuelve al estudio. La aplicación no exporta vídeo.
+- Flechas izquierda/derecha pasan páginas; espacio activa o pausa el autopase. También se puede hacer clic o deslizar sobre el libro.
 
-- **🔒 100% Privado**: El PDF se procesa completamente en el navegador
-- **📖 Efecto realista**: Animación de paso de página con física natural
-- **⚡ Instantáneo**: Sin colas ni tiempos de espera del servidor
-- **📱 Responsive**: Funciona en desktop, tablet y móvil
-- **🖥️ Pantalla completa**: Modo inmersivo para presentaciones
-- **⌨️ Navegación por teclado**: Usa las flechas para pasar páginas
-- **🖼️ Miniaturas**: Vista previa de todas las páginas
-- **💾 Descarga**: Guarda páginas individuales como imágenes
+El cambio de encuadre y tamaño conserva la página. La velocidad de animación y el intervalo de autopase se configuran por separado. El autopase se detiene al final.
 
-## 🚀 Despliegue en Vercel
+## PDF y privacidad
 
-### Opción 1: Despliegue con un clic
+PDF.js y su worker se sirven desde la aplicación. Los documentos se procesan en el navegador, sin subirse a un servidor. Límite de 100 MB y 150 páginas; las imágenes se limitan a 2600 píxeles en su lado mayor para contener el consumo de memoria. Los documentos de tamaños mixtos se ajustan a la proporción de su primera página sin deformar su contenido. No se admiten PDFs protegidos con contraseña.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/TU-USUARIO/flipbook-creator)
+Las imágenes temporales se liberan al cambiar de documento. Al recargar se vuelve a la muestra: los documentos no se guardan.
 
-### Opción 2: Despliegue manual
+## Desarrollo
 
-1. **Sube el código a GitHub**
+`npm run build` compila con Turbopack y comprueba TypeScript. La escena utiliza PageFlip para la curvatura de las hojas y transformaciones CSS para la perspectiva. Los gestos se gestionan fuera de PageFlip para evitar errores de coordenadas en el libro escalado.
 
-```bash
-# Inicializa el repositorio
-git init
-git add .
-git commit -m "Initial commit"
+Los prototipos HTML iniciales están en `prototipos/`, fuera del build.
 
-# Crea un repo en GitHub y conéctalo
-git remote add origin https://github.com/TU-USUARIO/flipbook-creator.git
-git branch -M main
-git push -u origin main
-```
+## Cámara fija y zoom
 
-2. **Conecta con Vercel**
+El encuadre permanece fijo incluso al abrir o cerrar la portada. Puedes seleccionar libro completo, página izquierda o página derecha. La rueda sobre la escena y las teclas + / - ajustan el zoom entre 50 y 300 %, también en modo limpio. Mayús + arrastrar (o el botón central) desplaza la cámara sin pasar página; 0 restablece zoom, desplazamiento y foco. Las flechas siguen pasando páginas. Para obtener la nueva resolución, vuelve a importar el PDF. La nitidez de documentos escaneados depende del original.
 
-   - Ve a [vercel.com](https://vercel.com)
-   - Haz clic en "New Project"
-   - Importa tu repositorio de GitHub
-   - Vercel detectará automáticamente que es un proyecto Next.js
-   - Haz clic en "Deploy"
 
-3. **¡Listo!** Tu flipbook estará disponible en `tu-proyecto.vercel.app`
+## Papel curvo 3D
 
-## 💻 Desarrollo local
+Escena 3D utiliza Three.js con hojas subdivididas y curvatura geométrica permanente, deformación animada al pasar página, reverso impreso, cantos en capas, iluminación de estudio y material satinado. Lectura conserva el motor PageFlip anterior.
 
-```bash
-# Instala las dependencias
-npm install
+El preset Revista selecciona 58 grados de inclinación y -22 de giro. Se puede ajustar la inclinación hasta 72 grados, curvatura entre 0 y 150 %, y brillo de mate a satinado. Cámara, desplazamiento y zoom permanecen independientes del cambio de página. La renderización necesita WebGL; si no está disponible se activa Lectura. Las texturas se cargan bajo demanda y se liberan al alejarse de la página actual.
 
-# Inicia el servidor de desarrollo
-npm run dev
+## Aspecto
 
-# Abre http://localhost:3000
-```
+La interfaz sigue el lenguaje visual de Hijos del Ladrillo (GOV.UK adoptado):
+Arial en todo, titulares negros, azul `#1d70b8` para acciones y enlaces, verde
+`#00703c` solo para la acción principal, amarillo `#ffdd00` solo para el foco de
+teclado. Cuerpo a 19 px en escritorio y 16 px en móvil. Sin degradados ni sombras
+decorativas. Todo vive en `app/globals.css`, sin Tailwind ni PostCSS.
 
-## 🛠️ Tecnologías utilizadas
-
-- **[Next.js 14](https://nextjs.org/)** - Framework React con App Router
-- **[PDF.js](https://mozilla.github.io/pdf.js/)** - Procesamiento de PDF en el navegador
-- **[PageFlip](https://nodlik.github.io/StPageFlip/)** - Librería de efecto flipbook
-- **[Tailwind CSS](https://tailwindcss.com/)** - Estilos utilitarios
-- **[Lucide React](https://lucide.dev/)** - Iconos
-- **[react-dropzone](https://react-dropzone.js.org/)** - Zona de arrastrar y soltar
-
-## 📁 Estructura del proyecto
-
-```
-flipbook-app/
-├── app/
-│   ├── globals.css      # Estilos globales
-│   ├── layout.tsx       # Layout principal
-│   └── page.tsx         # Página de inicio
-├── components/
-│   └── FlipbookViewer.tsx  # Componente del flipbook
-├── public/              # Archivos estáticos
-├── package.json
-├── tailwind.config.js
-├── tsconfig.json
-└── next.config.js
-```
-
-## 🎨 Personalización
-
-### Cambiar colores
-
-Edita las variables en `tailwind.config.js`:
-
-```js
-colors: {
-  'cream': '#F5F0E8',      // Color de fondo claro
-  'parchment': '#EDE4D3',  // Color de páginas
-  'ink': '#1A1A1A',        // Color de texto oscuro
-  'gold': '#C9A227',       // Color de acento principal
-  'burgundy': '#722F37',   // Color de acento secundario
-}
-```
-
-### Cambiar fuentes
-
-Las fuentes se cargan desde Google Fonts en `app/globals.css`:
-
-```css
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+Pro&display=swap');
-```
-
-## 📝 Notas
-
-- El tamaño máximo del PDF depende de la memoria del navegador del usuario
-- PDFs con muchas páginas pueden tardar más en procesar
-- Para mejor rendimiento, se recomienda PDFs de menos de 50 páginas
-
-## 📄 Licencia
-
-MIT License - Siéntete libre de usar este proyecto para cualquier propósito.
-
----
-
-Creado con ❤️ para transformar documentos en experiencias interactivas.
+Los fondos de escena son colores planos porque son el decorado de la grabación,
+no parte de la interfaz. El croma verde está para recortar después en el montaje.
