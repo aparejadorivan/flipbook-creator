@@ -1,13 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  webpack: (config) => {
-    config.resolve.alias.canvas = false;
-    config.resolve.alias.encoding = false;
-    return config;
-  },
-  experimental: {
-    serverComponentsExternalPackages: ['pdfjs-dist'],
-  },
+  // pdfjs-dist solo se usa en el cliente; que Next no intente empaquetarlo en el servidor.
+  serverExternalPackages: ['pdfjs-dist'],
 };
 
 module.exports = nextConfig;
