@@ -77,8 +77,11 @@ export default function CurvedBook(props: Props) {
     const assembly = new THREE.Group();
     const book = new THREE.Group();
     assembly.add(book); scene.add(assembly);
-    scene.add(new THREE.AmbientLight(0xffffff, .25));
-    const key = new THREE.DirectionalLight(0xfff5e8, .9);
+    // La suma de las luces se mantiene por debajo de 1 para que el papel blanco no
+    // sature: por encima de 1 todo lo que no es negro puro se levanta y se pierde
+    // contraste en el texto.
+    scene.add(new THREE.AmbientLight(0xffffff, .18));
+    const key = new THREE.DirectionalLight(0xfff5e8, .62);
     key.position.set(-350, 700, 1100); key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);
     key.shadow.camera.left = key.shadow.camera.bottom = -1200;
@@ -86,7 +89,7 @@ export default function CurvedBook(props: Props) {
     key.shadow.camera.near = 10; key.shadow.camera.far = 3500;
     key.shadow.bias = -.00015; key.shadow.normalBias = 1.5; key.shadow.radius = 4;
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0xe7f0ff, .15);
+    const fill = new THREE.DirectionalLight(0xe7f0ff, .10);
     fill.position.set(600, -100, 800); scene.add(fill);
     const floorMaterial = new THREE.ShadowMaterial({ opacity: .3 });
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), floorMaterial);
@@ -107,19 +110,82 @@ export default function CurvedBook(props: Props) {
     const textures = new Map<number, THREE.Texture>();
     const pending = new Map<number, Promise<THREE.Texture | null>>();
     const loader = new THREE.TextureLoader();
+    const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+    // El PDF se rasteriza a 2600 px de lado mayor, pero la página casi siempre se ve
+    // mucho más pequeña. Dejar que la GPU resuelva esa diferencia con mipmaps borraba
+    // el texto: promedia en espacio lineal, y el promedio lineal de un trazo negro fino
+    // sobre papel blanco sale casi blanco. Quitar los mipmaps lo devuelve, pero a costa
+    // de aliasing. La salida es no tener que reducir: se construye la textura al tamaño
+    // al que se va a ver, encogiendo en un canvas 2D (que filtra en gamma, como el
+    // navegador) y se rehace cuando el zoom cambia de verdad.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let builtHeight = 0;
+    function wantedHeight() {
+      // 600 es la altura de la hoja en unidades de escena, y una unidad es un píxel CSS.
+      // El margen de 1.6 deja aire para acercarse un poco sin rehacer nada.
+      return Math.round(Math.min(2048, Math.max(384, 600 * latest.current.scale * dpr * 1.6)));
+    }
+    function buildTexture(image: HTMLImageElement, height: number): THREE.Texture {
+      const sourceWidth = image.naturalWidth || image.width;
+      const sourceHeight = image.naturalHeight || image.height;
+      const target = Math.min(height, sourceHeight);
+      const canvas = document.createElement('canvas');
+      canvas.height = Math.max(1, target);
+      canvas.width = Math.max(1, Math.round(sourceWidth * (target / Math.max(1, sourceHeight))));
+      const context = canvas.getContext('2d');
+      if (!context) {
+        const plain = new THREE.Texture(image);
+        plain.colorSpace = THREE.SRGBColorSpace;
+        plain.anisotropy = maxAnisotropy;
+        plain.needsUpdate = true;
+        return plain;
+      }
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = 'high';
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = maxAnisotropy;
+      tex.magFilter = THREE.LinearFilter;
+      tex.minFilter = THREE.LinearFilter;
+      tex.generateMipmaps = false;
+      tex.needsUpdate = true;
+      return tex;
+    }
     function texture(index: number): Promise<THREE.Texture | null> {
       if (index < 0 || index >= props.pages.length) return Promise.resolve(null);
       if (textures.has(index)) return Promise.resolve(textures.get(index)!);
       if (pending.has(index)) return pending.get(index)!;
-      const task = new Promise<THREE.Texture | null>((resolve, reject) => {
-        loader.load(props.pages[index], tex => {
-          if (disposed) { tex.dispose(); resolve(null); return; }
-          tex.colorSpace = THREE.SRGBColorSpace;
-          tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-          textures.set(index, tex); pending.delete(index); dirty = true; resolve(tex);
+      const height = builtHeight || (builtHeight = wantedHeight());
+      // No se guarda la imagen original: con 150 páginas decodificadas en memoria el
+      // consumo se dispara. Volver a cargarla desde su blob cuando hace falta es barato.
+      const ready = new Promise<HTMLImageElement>((resolve, reject) => {
+        loader.load(props.pages[index], loaded => {
+          const image = loaded.image as HTMLImageElement;
+          loaded.dispose();
+          resolve(image);
         }, undefined, reject);
       });
+      const task = ready.then(image => {
+        if (disposed) return null;
+        const tex = buildTexture(image, height);
+        textures.set(index, tex); pending.delete(index); dirty = true;
+        return tex;
+      });
       pending.set(index, task); return task;
+    }
+    function rebuildTextures() {
+      builtHeight = wantedHeight();
+      for (const tex of textures.values()) tex.dispose();
+      textures.clear();
+      // assign() se salta el trabajo si el índice no ha cambiado, así que hay que
+      // soltar los mapas actuales para que vuelva a tomarlos.
+      [left, right, movingFront, movingBack].forEach(item => {
+        item.material.map?.dispose();
+        item.material.map = null;
+        item.material.needsUpdate = true;
+      });
+      void prepare(shown, true);
     }
     function sheet(side: number, reverse = false, depth = 0) {
       const geometry = new THREE.PlaneGeometry(1, 1, 72, 12);
@@ -221,6 +287,12 @@ export default function CurvedBook(props: Props) {
           item.material.roughness = .85 - p.gloss / 220;
           item.material.clearcoatRoughness = .6 - p.gloss / 220;
         });
+      }
+      // Si el zoom ha cambiado lo bastante, la textura deja de corresponder al tamaño
+      // en pantalla: se rehace, pero nunca en mitad de un paso de página.
+      if (!transition && builtHeight) {
+        const want = wantedHeight();
+        if (want > builtHeight * 1.5 || want < builtHeight * .55) rebuildTextures();
       }
       if (transition) {
         const t = Math.min(1, (now - transition.start) / transition.duration);
